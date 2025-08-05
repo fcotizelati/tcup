@@ -33,18 +33,19 @@ dev = [
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "tcup",
-    "XDGMM/xdgmm",
+    "src/tcup",
+    "src/XDGMM/xdgmm",
 ]
 
 [tool.hatch.build.targets.wheel]
 include = [
-    "tcup",
-    "XDGMM/xdgmm",
+    "src/tcup",
+    "src/XDGMM/xdgmm",
 ]
 
 [tool.hatch.build.targets.wheel.sources]
-"XDGMM/xdgmm" = "xdgmm"
+"src/XDGMM/xdgmm" = "xdgmm"
+"src/tcup" = "tcup"
 
 [build-system]
 requires = ["hatchling"]
