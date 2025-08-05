@@ -253,7 +253,7 @@ def tcup(
 
     if cov_x is None:
         raise ValueError(
-            "Couldn't identify x error data;"
+            "Couldn't identify x error data; "
             "please pass either `dx` or `cov_x`"
         )
 
