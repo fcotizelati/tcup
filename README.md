@@ -78,7 +78,8 @@ The report directory contains:
 - `report.md`: a compact Markdown index of groups, variables, and files
 - `plots/regression.png`: observed data with errors and posterior regression
   uncertainty for one-dimensional fits
-- `plots/corner.png`: joint posterior constraints for the main parameters
+- `plots/corner.png`: joint posterior constraints for the main parameters,
+  generated with the `corner` package
 - `plots/parameters.png`: readable marginal constraints and intervals
 
 Sampler diagnostics and scaled-space posterior-predictive plots are available

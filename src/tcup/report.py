@@ -201,7 +201,7 @@ def _corner_plot(
     max_draws: int = 2500,
     random_seed: int = 12345,
 ) -> None:
-    import matplotlib.pyplot as plt
+    import corner
     import numpy as np
 
     columns = _posterior_sample_columns(idata, var_names, max_vars=6)
@@ -215,55 +215,32 @@ def _corner_plot(
         idx = rng.choice(samples.shape[0], size=max_draws, replace=False)
         samples = samples[idx]
 
-    n_vars = samples.shape[1]
-    fig, axes = plt.subplots(
-        n_vars,
-        n_vars,
-        figsize=(2.25 * n_vars + 1.5, 2.25 * n_vars + 1.3),
+    medians = np.median(samples, axis=0)
+    fig = corner.corner(
+        samples,
+        labels=labels,
+        truths=medians,
+        truth_color="#f28e2b",
+        quantiles=[0.16, 0.5, 0.84],
+        levels=[0.683, 0.955, 0.997],
+        show_titles=True,
+        title_fmt=".3g",
+        title_kwargs={"fontsize": 13},
+        label_kwargs={"fontsize": 13},
+        color="#2c8c99",
+        hist_kwargs={
+            "color": "black",
+            "linewidth": 1.0,
+        },
+        contour_kwargs={"linewidths": 1.0},
+        fill_contours=False,
+        plot_datapoints=False,
+        smooth=1.0,
+        smooth1d=0.8,
+        max_n_ticks=4,
+        top_ticks=True,
     )
-
-    for row in range(n_vars):
-        for col in range(n_vars):
-            ax = axes[row, col]
-            if col > row:
-                ax.axis("off")
-                continue
-
-            x_values = samples[:, col]
-            if row == col:
-                q16, q50, q84 = np.quantile(x_values, [0.16, 0.5, 0.84])
-                ax.hist(
-                    x_values,
-                    bins=34,
-                    density=True,
-                    color="#4c78a8",
-                    alpha=0.35,
-                    edgecolor="none",
-                )
-                ax.axvspan(q16, q84, color="#4c78a8", alpha=0.25, lw=0)
-                ax.axvline(q50, color="#1f4e79", lw=1.8)
-                ax.set_yticks([])
-            else:
-                ax.hist2d(
-                    x_values,
-                    samples[:, row],
-                    bins=32,
-                    cmap="Blues",
-                    cmin=1,
-                )
-
-            ax.tick_params(labelsize=9)
-            if row == n_vars - 1:
-                ax.set_xlabel(labels[col], fontsize=11)
-            else:
-                ax.set_xticklabels([])
-            if col == 0 and row > 0:
-                ax.set_ylabel(labels[row], fontsize=11)
-            elif col != 0:
-                ax.set_yticklabels([])
-
-    fig.suptitle("Joint posterior constraints", fontsize=16, y=0.995)
-    fig.subplots_adjust(hspace=0.08, wspace=0.08)
+    fig.suptitle("Joint posterior constraints", fontsize=17, y=0.995)
 
 
 def _as_optional_1d(value: Any) -> Any:
