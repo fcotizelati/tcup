@@ -16,8 +16,9 @@ DEFAULT_REPORT_VARS = (
 DEFAULT_PLOT_KINDS = (
     "regression",
     "corner",
-    "parameters",
 )
+
+OPTIONAL_PLOT_KINDS = ("parameters",)
 
 DIAGNOSTIC_PLOT_KINDS = (
     "trace",
@@ -25,7 +26,9 @@ DIAGNOSTIC_PLOT_KINDS = (
     "ppc_y_density",
 )
 
-ALL_PLOT_KINDS = DEFAULT_PLOT_KINDS + DIAGNOSTIC_PLOT_KINDS
+ALL_PLOT_KINDS = (
+    DEFAULT_PLOT_KINDS + OPTIONAL_PLOT_KINDS + DIAGNOSTIC_PLOT_KINDS
+)
 
 
 def _prefixed(file_prefix: str, name: str) -> str:
@@ -87,7 +90,6 @@ def _write_plot(path: Path, plot_func, warnings: list[str]) -> None:
 
     try:
         plt.close("all")
-        plt.style.use("seaborn-v0_8-whitegrid")
         plot_func()
         fig = plt.gcf()
         fig.tight_layout()
@@ -174,6 +176,7 @@ def _parameter_plot(idata: Any, var_names: Optional[Sequence[str]]) -> None:
         ax.axvspan(q025, q975, color="#4c78a8", alpha=0.12, lw=0)
         ax.axvspan(q16, q84, color="#4c78a8", alpha=0.24, lw=0)
         ax.axvline(q50, color="#1f4e79", lw=2.2)
+        ax.grid(False)
         ax.set_yticks([])
         ax.set_ylabel(label, rotation=0, ha="right", va="center", fontsize=12)
         ax.tick_params(axis="x", labelsize=11)
@@ -341,6 +344,7 @@ def _regression_plot(
     )
     ax.set_xlabel("observed x", fontsize=12)
     ax.set_ylabel("observed y", fontsize=12)
+    ax.grid(False)
     ax.tick_params(labelsize=11)
     ax.legend(loc="best", fontsize=10)
     ax.set_title("Posterior regression relation", fontsize=15)

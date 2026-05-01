@@ -55,11 +55,23 @@ def test_write_report_outputs_default_science_plots(tmp_path):
     )
 
     plot_names = {path.name for path in artifacts["plots"]}
-    assert "parameters.png" in plot_names
     assert "corner.png" in plot_names
     assert "regression.png" in plot_names
+    assert "parameters.png" not in plot_names
     assert "energy.png" not in plot_names
     assert "ppc_y_density.png" not in plot_names
+
+
+def test_write_report_outputs_optional_parameter_plot(tmp_path):
+    artifacts = tcup.write_report(
+        _idata(),
+        tmp_path,
+        save_netcdf=False,
+        plot_kinds=["parameters"],
+    )
+
+    plot_names = {path.name for path in artifacts["plots"]}
+    assert plot_names == {"parameters.png"}
 
 
 def test_write_report_outputs_optional_diagnostics(tmp_path):

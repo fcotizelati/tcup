@@ -80,13 +80,13 @@ The report directory contains:
   uncertainty for one-dimensional fits
 - `plots/corner.png`: joint posterior constraints for the main parameters,
   generated with the `corner` package
-- `plots/parameters.png`: readable marginal constraints and intervals
 
-Sampler diagnostics and scaled-space posterior-predictive plots are available
-when requested:
+Additional parameter-summary, sampler-diagnostic, and scaled-space
+posterior-predictive plots are available when requested:
 
 ```python
-tcup.write_report(idata, "tcup_report", plot_kinds=["all"])
+tcup.write_report(idata, "tcup_report", plot_kinds=["parameters"])
+tcup.write_report(idata, "tcup_report", plot_kinds=["diagnostics"])
 ```
 
 You can also write a report from an existing result:
