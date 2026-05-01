@@ -13,9 +13,46 @@ DEFAULT_REPORT_VARS = (
     "outlier_frac",
 )
 
+DEFAULT_PLOT_KINDS = (
+    "regression",
+    "corner",
+    "parameters",
+)
+
+DIAGNOSTIC_PLOT_KINDS = (
+    "trace",
+    "energy",
+    "ppc_y_density",
+)
+
+ALL_PLOT_KINDS = DEFAULT_PLOT_KINDS + DIAGNOSTIC_PLOT_KINDS
+
 
 def _prefixed(file_prefix: str, name: str) -> str:
     return f"{file_prefix}{name}"
+
+
+def _normalise_plot_kinds(
+    plot_kinds: Optional[Sequence[str]],
+) -> tuple[str, ...]:
+    if plot_kinds is None:
+        return DEFAULT_PLOT_KINDS
+
+    kinds: list[str] = []
+    for kind in plot_kinds:
+        if kind == "all":
+            kinds.extend(ALL_PLOT_KINDS)
+        elif kind == "diagnostics":
+            kinds.extend(DIAGNOSTIC_PLOT_KINDS)
+        elif kind in ALL_PLOT_KINDS:
+            kinds.append(kind)
+        else:
+            allowed = ", ".join((*ALL_PLOT_KINDS, "all", "diagnostics"))
+            raise ValueError(
+                f"Unknown plot kind `{kind}`; choose from {allowed}"
+            )
+
+    return tuple(dict.fromkeys(kinds))
 
 
 def _selected_vars(
@@ -50,14 +87,183 @@ def _write_plot(path: Path, plot_func, warnings: list[str]) -> None:
 
     try:
         plt.close("all")
+        plt.style.use("seaborn-v0_8-whitegrid")
         plot_func()
         fig = plt.gcf()
         fig.tight_layout()
-        fig.savefig(path, dpi=150, bbox_inches="tight")
+        fig.savefig(path, dpi=180, bbox_inches="tight")
     except Exception as exc:  # pragma: no cover - backend dependent
         warnings.append(f"{path.name}: {exc}")
     finally:
         plt.close("all")
+
+
+def _posterior_sample_columns(
+    idata: Any,
+    var_names: Optional[Sequence[str]],
+    *,
+    max_vars: int = 8,
+) -> list[tuple[str, Any]]:
+    import numpy as np
+
+    if var_names is None or not hasattr(idata, "posterior"):
+        return []
+
+    columns = []
+    for name in var_names:
+        if name not in idata.posterior:
+            continue
+
+        values = np.asarray(idata.posterior[name].values)
+        if values.ndim <= 2:
+            columns.append((name, values.reshape(-1)))
+            continue
+
+        values = values.reshape(-1, *values.shape[2:])
+        for index in np.ndindex(values.shape[1:]):
+            if len(index) == 1:
+                label = f"{name}[{index[0]}]"
+            else:
+                label = f"{name}[{','.join(str(i) for i in index)}]"
+            columns.append((label, values[(slice(None), *index)]))
+
+    clean_columns = []
+    for label, samples in columns:
+        samples = np.asarray(samples, dtype=float)
+        samples = samples[np.isfinite(samples)]
+        if samples.size > 1:
+            clean_columns.append((label, samples))
+
+    return clean_columns[:max_vars]
+
+
+def _format_interval(low: float, high: float) -> str:
+    return f"[{low:.3g}, {high:.3g}]"
+
+
+def _parameter_plot(idata: Any, var_names: Optional[Sequence[str]]) -> None:
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    columns = _posterior_sample_columns(idata, var_names)
+    if not columns:
+        raise ValueError("No posterior samples available for parameter plot")
+
+    fig_height = max(3.2, 1.15 * len(columns) + 1.1)
+    fig, axes = plt.subplots(
+        len(columns),
+        1,
+        figsize=(8.0, fig_height),
+        squeeze=False,
+    )
+    axes = axes[:, 0]
+
+    for ax, (label, samples) in zip(axes, columns, strict=True):
+        q025, q16, q50, q84, q975 = np.quantile(
+            samples,
+            [0.025, 0.16, 0.5, 0.84, 0.975],
+        )
+        ax.hist(
+            samples,
+            bins=36,
+            density=True,
+            color="#4c78a8",
+            alpha=0.22,
+            edgecolor="none",
+        )
+        ax.axvspan(q025, q975, color="#4c78a8", alpha=0.12, lw=0)
+        ax.axvspan(q16, q84, color="#4c78a8", alpha=0.24, lw=0)
+        ax.axvline(q50, color="#1f4e79", lw=2.2)
+        ax.set_yticks([])
+        ax.set_ylabel(label, rotation=0, ha="right", va="center", fontsize=12)
+        ax.tick_params(axis="x", labelsize=11)
+        ax.spines[["left", "right", "top"]].set_visible(False)
+        ax.text(
+            0.99,
+            0.82,
+            f"median {q50:.3g}; 68% {_format_interval(q16, q84)}",
+            transform=ax.transAxes,
+            ha="right",
+            va="center",
+            fontsize=10.5,
+            color="0.2",
+        )
+
+    axes[-1].set_xlabel("parameter value", fontsize=12)
+    fig.suptitle("Posterior parameter constraints", fontsize=15, y=1.0)
+    fig.subplots_adjust(hspace=0.55)
+
+
+def _corner_plot(
+    idata: Any,
+    var_names: Optional[Sequence[str]],
+    *,
+    max_draws: int = 2500,
+    random_seed: int = 12345,
+) -> None:
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    columns = _posterior_sample_columns(idata, var_names, max_vars=6)
+    if len(columns) < 2:
+        raise ValueError("At least two posterior variables are needed")
+
+    labels = [label for label, _ in columns]
+    samples = np.column_stack([values for _, values in columns])
+    rng = np.random.default_rng(random_seed)
+    if samples.shape[0] > max_draws:
+        idx = rng.choice(samples.shape[0], size=max_draws, replace=False)
+        samples = samples[idx]
+
+    n_vars = samples.shape[1]
+    fig, axes = plt.subplots(
+        n_vars,
+        n_vars,
+        figsize=(2.25 * n_vars + 1.5, 2.25 * n_vars + 1.3),
+    )
+
+    for row in range(n_vars):
+        for col in range(n_vars):
+            ax = axes[row, col]
+            if col > row:
+                ax.axis("off")
+                continue
+
+            x_values = samples[:, col]
+            if row == col:
+                q16, q50, q84 = np.quantile(x_values, [0.16, 0.5, 0.84])
+                ax.hist(
+                    x_values,
+                    bins=34,
+                    density=True,
+                    color="#4c78a8",
+                    alpha=0.35,
+                    edgecolor="none",
+                )
+                ax.axvspan(q16, q84, color="#4c78a8", alpha=0.25, lw=0)
+                ax.axvline(q50, color="#1f4e79", lw=1.8)
+                ax.set_yticks([])
+            else:
+                ax.hist2d(
+                    x_values,
+                    samples[:, row],
+                    bins=32,
+                    cmap="Blues",
+                    cmin=1,
+                )
+
+            ax.tick_params(labelsize=9)
+            if row == n_vars - 1:
+                ax.set_xlabel(labels[col], fontsize=11)
+            else:
+                ax.set_xticklabels([])
+            if col == 0 and row > 0:
+                ax.set_ylabel(labels[row], fontsize=11)
+            elif col != 0:
+                ax.set_yticklabels([])
+
+    fig.suptitle("Joint posterior constraints", fontsize=16, y=0.995)
+    fig.subplots_adjust(hspace=0.08, wspace=0.08)
 
 
 def _as_optional_1d(value: Any) -> Any:
@@ -156,10 +362,11 @@ def _regression_plot(
         capsize=0,
         label="observed data",
     )
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.legend(loc="best", fontsize="small")
-    ax.set_title("Posterior regression")
+    ax.set_xlabel("observed x", fontsize=12)
+    ax.set_ylabel("observed y", fontsize=12)
+    ax.tick_params(labelsize=11)
+    ax.legend(loc="best", fontsize=10)
+    ax.set_title("Posterior regression relation", fontsize=15)
     fig.tight_layout()
 
 
@@ -169,48 +376,35 @@ def _write_plots(
     var_names: Optional[Sequence[str]],
     file_prefix: str,
     data: Optional[dict[str, Any]] = None,
+    plot_kinds: Optional[Sequence[str]] = None,
 ) -> tuple[list[Path], list[str]]:
     import arviz as az
 
     plot_dir = output_dir / "plots"
     plot_dir.mkdir(parents=True, exist_ok=True)
     plot_vars = _selected_vars(idata, var_names)
+    plot_kinds = _normalise_plot_kinds(plot_kinds)
     files: list[Path] = []
     warnings: list[str] = []
 
     if plot_vars is not None:
-        plot_specs = [
-            (
-                "trace.png",
-                lambda: az.plot_trace(
-                    idata, var_names=plot_vars, compact=True
-                ),
-            ),
-            (
-                "posterior.png",
-                lambda: az.plot_posterior(idata, var_names=plot_vars),
-            ),
-            (
-                "forest.png",
-                lambda: az.plot_forest(
-                    idata,
-                    var_names=plot_vars,
-                    combined=True,
-                    hdi_prob=0.68,
-                ),
-            ),
-        ]
-        if len(plot_vars) > 1:
+        plot_specs = []
+        if "parameters" in plot_kinds:
+            plot_specs.append(
+                ("parameters.png", lambda: _parameter_plot(idata, plot_vars))
+            )
+        if "trace" in plot_kinds:
             plot_specs.append(
                 (
-                    "corner.png",
-                    lambda: az.plot_pair(
-                        idata,
-                        var_names=plot_vars,
-                        kind="kde",
-                        marginals=True,
+                    "trace.png",
+                    lambda: az.plot_trace(
+                        idata, var_names=plot_vars, compact=True
                     ),
                 )
+            )
+        if "corner" in plot_kinds:
+            plot_specs.append(
+                ("corner.png", lambda: _corner_plot(idata, plot_vars))
             )
         for filename, plot_func in plot_specs:
             path = plot_dir / _prefixed(file_prefix, filename)
@@ -218,32 +412,37 @@ def _write_plots(
             if path.exists():
                 files.append(path)
 
-    if hasattr(idata, "sample_stats") and "energy" in idata.sample_stats:
+    if (
+        "energy" in plot_kinds
+        and hasattr(idata, "sample_stats")
+        and "energy" in idata.sample_stats
+    ):
         path = plot_dir / _prefixed(file_prefix, "energy.png")
         _write_plot(path, lambda: az.plot_energy(idata), warnings)
         if path.exists():
             files.append(path)
 
     if (
-        hasattr(idata, "posterior_predictive")
+        "ppc_y_density" in plot_kinds
+        and hasattr(idata, "posterior_predictive")
         and hasattr(idata, "observed_data")
         and "y_scaled" in idata.posterior_predictive
         and "y_scaled" in idata.observed_data
     ):
-        path = plot_dir / _prefixed(file_prefix, "ppc_y_scaled.png")
+        path = plot_dir / _prefixed(file_prefix, "ppc_y_density.png")
         _write_plot(
             path,
             lambda: az.plot_ppc(
                 idata,
                 data_pairs={"y_scaled": "y_scaled"},
-                num_pp_samples=100,
+                num_pp_samples=40,
             ),
             warnings,
         )
         if path.exists():
             files.append(path)
 
-    if data is not None:
+    if data is not None and "regression" in plot_kinds:
         path = plot_dir / _prefixed(file_prefix, "regression.png")
         _write_plot(
             path,
@@ -266,6 +465,7 @@ def write_report(
     save_netcdf: bool = True,
     save_summary: bool = True,
     save_plots: bool = True,
+    plot_kinds: Optional[Sequence[str]] = None,
     x: Any = None,
     y: Any = None,
     dy: Any = None,
@@ -319,6 +519,7 @@ def write_report(
             selected_vars,
             file_prefix,
             data=data,
+            plot_kinds=plot_kinds,
         )
         artifacts["plots"] = plot_files
 

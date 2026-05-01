@@ -38,7 +38,7 @@ def test_write_report_outputs_standard_artifacts(tmp_path):
     assert "posterior" in artifacts["report"].read_text()
 
 
-def test_write_report_outputs_diagnostic_plots(tmp_path):
+def test_write_report_outputs_default_science_plots(tmp_path):
     x = np.linspace(0.0, 1.0, 6)
     y = 1.0 + 2.0 * x
     cov_x = np.broadcast_to(np.eye(1) * 0.01, (x.shape[0], 1, 1)).copy()
@@ -55,11 +55,25 @@ def test_write_report_outputs_diagnostic_plots(tmp_path):
     )
 
     plot_names = {path.name for path in artifacts["plots"]}
-    assert "trace.png" in plot_names
-    assert "posterior.png" in plot_names
-    assert "forest.png" in plot_names
+    assert "parameters.png" in plot_names
     assert "corner.png" in plot_names
     assert "regression.png" in plot_names
+    assert "energy.png" not in plot_names
+    assert "ppc_y_density.png" not in plot_names
+
+
+def test_write_report_outputs_optional_diagnostics(tmp_path):
+    artifacts = tcup.write_report(
+        _idata(),
+        tmp_path,
+        save_netcdf=False,
+        plot_kinds=["diagnostics"],
+    )
+
+    plot_names = {path.name for path in artifacts["plots"]}
+    assert "trace.png" in plot_names
+    assert "energy.png" in plot_names
+    assert "ppc_y_density.png" in plot_names
 
 
 def test_cli_reads_csv_and_forwards_report_options(tmp_path, monkeypatch):
@@ -86,6 +100,7 @@ def test_cli_reads_csv_and_forwards_report_options(tmp_path, monkeypatch):
             "--num-samples",
             "11",
             "--no-plots",
+            "--diagnostic-plots",
         ]
     )
 
@@ -93,4 +108,5 @@ def test_cli_reads_csv_and_forwards_report_options(tmp_path, monkeypatch):
     assert calls["seed"] == 10
     assert calls["num_samples"] == 11
     assert calls["report_kwargs"]["save_plots"] is False
+    assert calls["report_kwargs"]["plot_kinds"] == ["diagnostics"]
     assert np.allclose(calls["x"], [0.0, 1.0, 2.0])

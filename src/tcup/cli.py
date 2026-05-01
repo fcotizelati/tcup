@@ -7,7 +7,7 @@ from typing import Optional
 import numpy as np
 
 from . import tcup
-from .report import DEFAULT_REPORT_VARS
+from .report import ALL_PLOT_KINDS, DEFAULT_REPORT_VARS
 
 
 def _split_columns(value: str) -> list[str]:
@@ -86,6 +86,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "May be passed multiple times."
         ),
     )
+    parser.add_argument(
+        "--plot",
+        action="append",
+        dest="plot_kinds",
+        choices=[*ALL_PLOT_KINDS, "all", "diagnostics"],
+        help=(
+            "Plot to write. Defaults to science-facing regression, corner, "
+            "and parameter plots. Pass multiple times, or use diagnostics/all."
+        ),
+    )
+    parser.add_argument(
+        "--diagnostic-plots",
+        action="store_true",
+        help="Also write sampler and scaled posterior-predictive diagnostics.",
+    )
     parser.add_argument("--no-netcdf", action="store_true")
     parser.add_argument("--no-summary", action="store_true")
     parser.add_argument("--no-plots", action="store_true")
@@ -117,6 +132,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     report_vars = args.report_vars
     if report_vars is None:
         report_vars = list(DEFAULT_REPORT_VARS)
+    plot_kinds = args.plot_kinds
+    if args.diagnostic_plots:
+        plot_kinds = [*(plot_kinds or []), "diagnostics"]
 
     tcup(
         x=_read_columns(data, x_columns),
@@ -135,6 +153,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "save_netcdf": not args.no_netcdf,
             "save_summary": not args.no_summary,
             "save_plots": not args.no_plots,
+            "plot_kinds": plot_kinds,
         },
         **sampler_kwargs,
     )

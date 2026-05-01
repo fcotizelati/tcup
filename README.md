@@ -76,8 +76,17 @@ The report directory contains:
 - `inference_data.nc`: complete ArviZ result file
 - `summary.csv` and `summary.txt`: posterior summaries for key parameters
 - `report.md`: a compact Markdown index of groups, variables, and files
-- `plots/`: sampler diagnostics, parameter posteriors, a corner plot,
-  posterior-predictive checks, and a regression plot for one-dimensional fits
+- `plots/regression.png`: observed data with errors and posterior regression
+  uncertainty for one-dimensional fits
+- `plots/corner.png`: joint posterior constraints for the main parameters
+- `plots/parameters.png`: readable marginal constraints and intervals
+
+Sampler diagnostics and scaled-space posterior-predictive plots are available
+when requested:
+
+```python
+tcup.write_report(idata, "tcup_report", plot_kinds=["all"])
+```
 
 You can also write a report from an existing result:
 
@@ -91,6 +100,8 @@ fits the model and writes the same report bundle:
 ```bash
 tcup-fit data.csv --output-dir tcup_report --seed 4
 ```
+
+Use `--diagnostic-plots` to add trace, energy, and scaled-density PPC plots.
 
 The optional Stan backend can be installed with `pip install "tcup[stan]"`,
 but it is experimental and is not guaranteed to match the validated NumPyro
