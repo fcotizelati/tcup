@@ -39,12 +39,27 @@ def test_write_report_outputs_standard_artifacts(tmp_path):
 
 
 def test_write_report_outputs_diagnostic_plots(tmp_path):
-    artifacts = tcup.write_report(_idata(), tmp_path, save_netcdf=False)
+    x = np.linspace(0.0, 1.0, 6)
+    y = 1.0 + 2.0 * x
+    cov_x = np.broadcast_to(np.eye(1) * 0.01, (x.shape[0], 1, 1)).copy()
+    dy = np.full_like(x, 0.1)
+
+    artifacts = tcup.write_report(
+        _idata(),
+        tmp_path,
+        save_netcdf=False,
+        x=x,
+        y=y,
+        dy=dy,
+        cov_x=cov_x,
+    )
 
     plot_names = {path.name for path in artifacts["plots"]}
     assert "trace.png" in plot_names
     assert "posterior.png" in plot_names
     assert "forest.png" in plot_names
+    assert "corner.png" in plot_names
+    assert "regression.png" in plot_names
 
 
 def test_cli_reads_csv_and_forwards_report_options(tmp_path, monkeypatch):

@@ -60,11 +60,115 @@ def _write_plot(path: Path, plot_func, warnings: list[str]) -> None:
         plt.close("all")
 
 
+def _as_optional_1d(value: Any) -> Any:
+    if value is None:
+        return None
+
+    import numpy as np
+
+    array = np.asarray(value, dtype=float)
+    if array.ndim == 2 and array.shape[1] == 1:
+        array = array[:, 0]
+    return array
+
+
+def _regression_plot(
+    idata: Any,
+    *,
+    x: Any,
+    y: Any,
+    dy: Any = None,
+    cov_x: Any = None,
+    max_draws: int = 100,
+    random_seed: int = 12345,
+) -> None:
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    x = _as_optional_1d(x)
+    y = _as_optional_1d(y)
+    dy = _as_optional_1d(dy)
+    if x is None or y is None:
+        raise ValueError("x and y are required for a regression plot")
+    if x.ndim != 1:
+        raise ValueError("regression plot is only supported for 1D x")
+    if y.ndim != 1 or y.shape[0] != x.shape[0]:
+        raise ValueError("y must be a 1D array with the same length as x")
+    if "alpha" not in idata.posterior or "beta" not in idata.posterior:
+        raise ValueError("posterior must contain alpha and beta")
+
+    beta = np.asarray(idata.posterior["beta"].values)
+    beta = beta.reshape(-1, beta.shape[-1])
+    if beta.shape[1] != 1:
+        raise ValueError("regression plot is only supported for 1D beta")
+    beta = beta[:, 0]
+
+    alpha = np.asarray(idata.posterior["alpha"].values).reshape(-1)
+    grid = np.linspace(x.min(), x.max(), 200)
+    y_draws = alpha[:, np.newaxis] + beta[:, np.newaxis] * grid[np.newaxis, :]
+
+    rng = np.random.default_rng(random_seed)
+    n_draws = min(max_draws, y_draws.shape[0])
+    draw_idx = rng.choice(y_draws.shape[0], size=n_draws, replace=False)
+
+    q025, q16, q50, q84, q975 = np.quantile(
+        y_draws,
+        [0.025, 0.16, 0.5, 0.84, 0.975],
+        axis=0,
+    )
+
+    xerr = None
+    if cov_x is not None:
+        cov_x = np.asarray(cov_x, dtype=float)
+        if cov_x.shape == (x.shape[0], 1, 1):
+            xerr = np.sqrt(cov_x[:, 0, 0])
+
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    ax.fill_between(
+        grid,
+        q025,
+        q975,
+        color="tab:red",
+        alpha=0.12,
+        label="95% regression interval",
+    )
+    ax.fill_between(
+        grid,
+        q16,
+        q84,
+        color="tab:red",
+        alpha=0.25,
+        label="68% regression interval",
+    )
+    ax.plot(grid, q50, color="tab:red", lw=2, label="posterior median")
+    for idx in draw_idx:
+        ax.plot(grid, y_draws[idx], color="tab:red", alpha=0.08, lw=0.8)
+    ax.errorbar(
+        x,
+        y,
+        xerr=xerr,
+        yerr=dy,
+        fmt="o",
+        ms=4,
+        color="black",
+        ecolor="0.45",
+        elinewidth=0.8,
+        capsize=0,
+        label="observed data",
+    )
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.legend(loc="best", fontsize="small")
+    ax.set_title("Posterior regression")
+    fig.tight_layout()
+
+
 def _write_plots(
     idata: Any,
     output_dir: Path,
     var_names: Optional[Sequence[str]],
     file_prefix: str,
+    data: Optional[dict[str, Any]] = None,
 ) -> tuple[list[Path], list[str]]:
     import arviz as az
 
@@ -96,6 +200,18 @@ def _write_plots(
                 ),
             ),
         ]
+        if len(plot_vars) > 1:
+            plot_specs.append(
+                (
+                    "corner.png",
+                    lambda: az.plot_pair(
+                        idata,
+                        var_names=plot_vars,
+                        kind="kde",
+                        marginals=True,
+                    ),
+                )
+            )
         for filename, plot_func in plot_specs:
             path = plot_dir / _prefixed(file_prefix, filename)
             _write_plot(path, plot_func, warnings)
@@ -127,6 +243,16 @@ def _write_plots(
         if path.exists():
             files.append(path)
 
+    if data is not None:
+        path = plot_dir / _prefixed(file_prefix, "regression.png")
+        _write_plot(
+            path,
+            lambda: _regression_plot(idata, **data),
+            warnings,
+        )
+        if path.exists():
+            files.append(path)
+
     return files, warnings
 
 
@@ -140,6 +266,10 @@ def write_report(
     save_netcdf: bool = True,
     save_summary: bool = True,
     save_plots: bool = True,
+    x: Any = None,
+    y: Any = None,
+    dy: Any = None,
+    cov_x: Any = None,
 ) -> dict[str, Any]:
     """Write standard t-cup result artifacts to ``output_dir``.
 
@@ -180,11 +310,15 @@ def write_report(
     plot_files: list[Path] = []
     plot_warnings: list[str] = []
     if save_plots:
+        data = None
+        if x is not None and y is not None:
+            data = {"x": x, "y": y, "dy": dy, "cov_x": cov_x}
         plot_files, plot_warnings = _write_plots(
             idata,
             output_dir,
             selected_vars,
             file_prefix,
+            data=data,
         )
         artifacts["plots"] = plot_files
 

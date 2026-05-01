@@ -76,7 +76,8 @@ The report directory contains:
 - `inference_data.nc`: complete ArviZ result file
 - `summary.csv` and `summary.txt`: posterior summaries for key parameters
 - `report.md`: a compact Markdown index of groups, variables, and files
-- `plots/`: trace, posterior, forest, energy, and posterior-predictive plots
+- `plots/`: sampler diagnostics, parameter posteriors, a corner plot,
+  posterior-predictive checks, and a regression plot for one-dimensional fits
 
 You can also write a report from an existing result:
 

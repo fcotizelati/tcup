@@ -346,6 +346,14 @@ def tcup(
 
         if report_kwargs is None:
             report_kwargs = {}
-        write_report(results, output_dir, **report_kwargs)
+        write_report(
+            results,
+            output_dir,
+            x=x,
+            y=y,
+            dy=dy,
+            cov_x=cov_x,
+            **report_kwargs,
+        )
 
     return results
