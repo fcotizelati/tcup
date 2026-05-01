@@ -55,6 +55,42 @@ Pass `cov_x` instead of `dx` for full covariance matrices with shape
 `(N, D, D)`. The number of mixture components in the latent-`x` prior can be
 fixed with `x_prior_components`; otherwise XDGMM selects it by BIC.
 
+## Reports and diagnostics
+
+Pass `output_dir` to write a reusable result bundle while still receiving the
+ArviZ `InferenceData` object in Python:
+
+```python
+idata = tcup.tcup(
+    x=x_obs,
+    y=y_obs,
+    dx=dx,
+    dy=dy,
+    seed=4,
+    output_dir="tcup_report",
+)
+```
+
+The report directory contains:
+
+- `inference_data.nc`: complete ArviZ result file
+- `summary.csv` and `summary.txt`: posterior summaries for key parameters
+- `report.md`: a compact Markdown index of groups, variables, and files
+- `plots/`: trace, posterior, forest, energy, and posterior-predictive plots
+
+You can also write a report from an existing result:
+
+```python
+tcup.write_report(idata, "tcup_report")
+```
+
+For CSV data with columns `x`, `y`, `dx`, and `dy`, the command line interface
+fits the model and writes the same report bundle:
+
+```bash
+tcup-fit data.csv --output-dir tcup_report --seed 4
+```
+
 The optional Stan backend can be installed with `pip install "tcup[stan]"`,
 but it is experimental and is not guaranteed to match the validated NumPyro
 backend.

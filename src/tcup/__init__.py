@@ -2,6 +2,16 @@ from typing import Optional
 
 from numpy.typing import ArrayLike
 
+__all__ = ["tcup", "write_report"]
+
+
+def __getattr__(name):
+    if name == "write_report":
+        from .report import write_report
+
+        return write_report
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 def tcup(
     x: ArrayLike,

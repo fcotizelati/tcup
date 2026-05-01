@@ -1,4 +1,5 @@
 import warnings
+from pathlib import Path
 from typing import Optional
 
 import arviz as az
@@ -223,6 +224,8 @@ def tcup(
     model_kwargs: Optional[dict] = None,
     scaler_class: type[Scaler] = StandardScaler,
     x_prior_components: Optional[int] = None,
+    output_dir: Optional[str | Path] = None,
+    report_kwargs: Optional[dict] = None,
     **sampler_kwargs,
 ):
     if model not in ["tcup", "ncup", "fixed"]:
@@ -337,5 +340,12 @@ def tcup(
         prior=prior,
         posterior_predictive=post_pred,
     )
+
+    if output_dir is not None:
+        from .report import write_report
+
+        if report_kwargs is None:
+            report_kwargs = {}
+        write_report(results, output_dir, **report_kwargs)
 
     return results

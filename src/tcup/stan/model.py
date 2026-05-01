@@ -1,4 +1,5 @@
 import warnings
+from pathlib import Path
 from typing import Optional
 
 import arviz as az
@@ -137,6 +138,8 @@ def tcup(
     model_kwargs: Optional[dict] = None,
     scaler_class: type[Scaler] = StandardScaler,
     x_prior_components: Optional[int] = None,
+    output_dir: Optional[str | Path] = None,
+    report_kwargs: Optional[dict] = None,
     **sampler_kwargs,
 ):
     warnings.warn(
@@ -197,4 +200,13 @@ def tcup(
     sampler_kwargs.setdefault("num_samples", 1000)
     sampler_kwargs.setdefault("num_chains", 4)
     fit = sampler.sample(**sampler_kwargs)
-    return az.from_pystan(_reprocess_samples(scaler, fit))
+    results = az.from_pystan(_reprocess_samples(scaler, fit))
+
+    if output_dir is not None:
+        from ..report import write_report
+
+        if report_kwargs is None:
+            report_kwargs = {}
+        write_report(results, output_dir, **report_kwargs)
+
+    return results

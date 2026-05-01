@@ -17,6 +17,23 @@ def test_tcup(data):
     assert isinstance(mcmc, az.InferenceData)
 
 
+def test_tcup_writes_report(data, tmp_path):
+    mcmc = tcup.tcup(
+        **data,
+        num_warmup=25,
+        num_samples=25,
+        num_chains=1,
+        prior_samples=25,
+        output_dir=tmp_path,
+        report_kwargs={"save_plots": False},
+    )
+
+    assert isinstance(mcmc, az.InferenceData)
+    assert (tmp_path / "inference_data.nc").is_file()
+    assert (tmp_path / "summary.csv").is_file()
+    assert (tmp_path / "report.md").is_file()
+
+
 def test_ncup(data):
     mcmc = tcup.tcup(
         **data,
