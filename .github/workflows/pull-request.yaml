@@ -1,28 +1,44 @@
 name: Pull request CI
-on: [pull_request]
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
 jobs:
     python-lint:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-            - uses: chartboost/ruff-action@v1
+            - uses: actions/checkout@v6
+            - uses: astral-sh/ruff-action@v3
     python-format:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-            - uses: chartboost/ruff-action@v1
+            - uses: actions/checkout@v6
+            - uses: astral-sh/ruff-action@v3
               with:
                 args: 'format --check'
     pytest:
         runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
               with:
                 submodules: true
-            - uses: actions/setup-python@v5
+            - uses: actions/setup-python@v6
               with:
-                python-version: '3.10'
-            - run: |
-                curl -LsSf https://astral.sh/uv/install.sh | sh
-                uv sync --all-extras
+                python-version: ${{ matrix.python-version }}
+            - uses: astral-sh/setup-uv@v8
+              with:
+                enable-cache: true
+            - run: uv sync --all-extras --frozen
             - run: uv run pytest tests/

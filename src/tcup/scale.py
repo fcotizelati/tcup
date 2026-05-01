@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import jax.numpy as jnp
+import numpy as np
 
 
 class Scaler(ABC):
@@ -48,6 +49,10 @@ class StandardScaler(Scaler):
         self.x_std = x.std(axis=0)
         self.y_mean = y.mean(axis=0)
         self.y_std = y.std(axis=0)
+        if not np.all(np.isfinite(self.x_std)) or np.any(self.x_std <= 0):
+            raise ValueError("`x` must vary along every fitted dimension")
+        if not np.isfinite(self.y_std) or self.y_std <= 0:
+            raise ValueError("`y` must vary")
 
     def transform(self, x, cov_x, y, dy):
         x_scaled = (x - self.x_mean) / self.x_std

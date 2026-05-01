@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 import jax.scipy.special as jspec
-import tensorflow_probability.substrates.jax.distributions as tfp_stats
+import numpyro.distributions as dist
 
 from .utils import peak_height
 
@@ -39,7 +39,7 @@ def pdf_inv_nu(nu, coord):
         # Therefore, let's clip at the limiting value
         P_nu = jnp.where(
             nu >= 1,
-            jnp.clip(dtheta / jnp.abs(grad_x(nu)), a_min=4.0),
+            jnp.clip(dtheta / jnp.abs(grad_x(nu)), min=4.0),
             0.0,
         )
     else:
@@ -52,14 +52,18 @@ def pdf_invgamma(nu, coord):
     ALPHA = 3
     BETA = 10
     grad_x = jnp.vectorize(jax.grad(coord))
-    return tfp_stats.InverseGamma(ALPHA, BETA).prob(nu) / jnp.abs(grad_x(nu))
+    return jnp.exp(dist.InverseGamma(ALPHA, BETA).log_prob(nu)) / jnp.abs(
+        grad_x(nu)
+    )
 
 
 def pdf_invgamma2(nu, coord):
     ALPHA = 2
     BETA = 6
     grad_x = jnp.vectorize(jax.grad(coord))
-    return tfp_stats.InverseGamma(ALPHA, BETA).prob(nu) / jnp.abs(grad_x(nu))
+    return jnp.exp(dist.InverseGamma(ALPHA, BETA).log_prob(nu)) / jnp.abs(
+        grad_x(nu)
+    )
 
 
 def pdf_F18(nu, coord):

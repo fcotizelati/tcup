@@ -113,3 +113,19 @@ def test_transform_coeff(simple_linear_data):
     assert np.isclose(alpha, ALPHA)
     assert np.isclose(beta.flatten(), BETA).all()
     assert np.isclose(sigma, SIGMA)
+
+
+def test_standard_scaler_rejects_constant_x(simple_linear_data):
+    data = simple_linear_data.copy()
+    data["x"] = np.ones_like(data["x"])
+
+    with pytest.raises(ValueError, match="x"):
+        StandardScaler(**data)
+
+
+def test_standard_scaler_rejects_constant_y(simple_linear_data):
+    data = simple_linear_data.copy()
+    data["y"] = np.ones_like(data["y"])
+
+    with pytest.raises(ValueError, match="y"):
+        StandardScaler(**data)

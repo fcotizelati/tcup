@@ -1,6 +1,7 @@
 import arviz as az
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 import scipy.stats as sps
 from numpyro.distributions import Normal
@@ -81,6 +82,10 @@ def test_ncup_intrinsic_dist(ncup_samples):
     assert sps.kstest(z, sps.norm.cdf).pvalue > THRESHOLD
 
 
+def test_ncup_does_not_sample_shape_parameter(ncup_samples):
+    assert "nu" not in ncup_samples
+
+
 def test_fixed3_intrinsic_dist(fixed3_samples):
     x = fixed3_samples["x_true"].flatten()
     y = fixed3_samples["y_true"].flatten()
@@ -96,5 +101,53 @@ def test_fixed3_intrinsic_dist(fixed3_samples):
 
 
 def test_tcup(data):
-    mcmc = tcup(**data)
+    mcmc = tcup(
+        **data,
+        num_warmup=25,
+        num_samples=25,
+        num_chains=1,
+        prior_samples=25,
+    )
     assert isinstance(mcmc, az.InferenceData)
+
+
+def test_tcup_validates_model_kwargs(monkeypatch):
+    monkeypatch.setattr(
+        "tcup.numpyro.xdgmm_prior", lambda *args, **kw: Normal()
+    )
+
+    with pytest.raises(TypeError):
+        tcup(
+            x=np.arange(3.0),
+            y=np.arange(3.0),
+            dy=np.ones(3) * 0.1,
+            dx=np.ones(3) * 0.1,
+            model_kwargs={"not_a_model_kwarg": True},
+            num_warmup=1,
+            num_samples=1,
+            num_chains=1,
+        )
+
+
+def test_tcup_forwards_x_prior_components(monkeypatch):
+    calls = {}
+
+    def fake_xdgmm_prior(x_scaled, cov_x_scaled, seed, K=None):
+        calls["K"] = K
+        raise RuntimeError("stop before sampling")
+
+    monkeypatch.setattr("tcup.numpyro.xdgmm_prior", fake_xdgmm_prior)
+
+    with pytest.raises(RuntimeError, match="stop before sampling"):
+        tcup(
+            x=np.arange(3.0),
+            y=np.arange(3.0),
+            dy=np.ones(3) * 0.1,
+            dx=np.ones(3) * 0.1,
+            x_prior_components=2,
+            num_warmup=1,
+            num_samples=1,
+            num_chains=1,
+        )
+
+    assert calls["K"] == 2

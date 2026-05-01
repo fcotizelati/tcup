@@ -10,6 +10,7 @@ from numpy.typing import ArrayLike
 from ..preprocess import deconvolve
 from ..scale import Scaler, StandardScaler
 from ..utils import outlier_frac, sigma_68
+from ..validation import prepare_input_arrays, validate_component_count
 
 
 def _get_model_src(model, **model_kwargs):
@@ -135,8 +136,16 @@ def tcup(
     seed: Optional[int] = None,
     model_kwargs: Optional[dict] = None,
     scaler_class: type[Scaler] = StandardScaler,
+    x_prior_components: Optional[int] = None,
     **sampler_kwargs,
 ):
+    warnings.warn(
+        "The Stan backend is experimental and is not guaranteed to match the "
+        "validated NumPyro backend.",
+        UserWarning,
+        stacklevel=2,
+    )
+
     if model not in ["tcup", "ncup", "fixed"]:
         raise NotImplementedError(
             "Please choose a model from ['tcup', 'ncup', 'fixed']"
@@ -156,35 +165,8 @@ def tcup(
     if model_kwargs is None:
         model_kwargs = {}
 
-    if dx is not None:
-        match dx.shape:
-            case (N, D1, D2):
-                warnings.warn(
-                    "`dx` appears to be an array of covariance matrices (and"
-                    "is assumed to be such); to silence this warning, pass as"
-                    "`cov_x` instead.",
-                    UserWarning,
-                )
-                if D1 != D2:
-                    raise ValueError("Covariance matrices are not square")
-                cov_x = dx
-            case (N, D):
-                cov_x = (
-                    np.array([np.identity(D) for _ in range(N)])
-                    * dx[:, :, np.newaxis]
-                    * dx[:, np.newaxis, :]
-                )
-            case (N,):
-                cov_x = np.ones((N, 1, 1)) * dx.reshape(N, 1, 1) ** 2
-
-    if cov_x is None:
-        raise ValueError(
-            "Couldn't identify x error data; "
-            "please pass either `dx` or `cov_x`"
-        )
-
-    if x.ndim == 1:
-        x = x[:, np.newaxis]
+    x_prior_components = validate_component_count(x_prior_components)
+    x, y, dy, cov_x = prepare_input_arrays(x, y, dy, dx, cov_x)
 
     scaler = scaler_class(x, cov_x, y, dy)
 
@@ -195,7 +177,14 @@ def tcup(
         scaled_dy,
     ) = scaler.transform(x, cov_x, y, dy)
 
-    stan_data = _prep_data(scaled_x, scaled_cov_x, scaled_y, scaled_dy, seed)
+    stan_data = _prep_data(
+        scaled_x,
+        scaled_cov_x,
+        scaled_y,
+        scaled_dy,
+        seed,
+        K=x_prior_components,
+    )
 
     if shape_param is not None:
         stan_data["nu"] = shape_param

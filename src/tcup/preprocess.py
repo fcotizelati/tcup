@@ -2,7 +2,13 @@
 
 import contextlib
 
-from xdgmm import XDGMM
+import numpy as np
+
+# Bundled XDGMM still uses np.infty, which NumPy 2 removed.
+if not hasattr(np, "infty"):
+    np.infty = np.inf
+
+from xdgmm import XDGMM  # noqa: E402
 
 
 def deconvolve(x, cov_x, n_components=None, random_state=None):

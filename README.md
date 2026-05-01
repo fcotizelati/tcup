@@ -1,33 +1,85 @@
 # t-cup - robust linear regression
 
-This package presents a statistical model for robust linear regression where
-both independent and dependent variables are measured with measurement error.
+`t-cup` implements robust Bayesian linear regression for data where both the
+independent and dependent variables are measured with uncertainty. The default
+backend is the validated NumPyro implementation.
 
-This code is bundled with [XDGMM](https://github.com/tholoien/XDGMM), a Python
-package implementing the
+The model uses a Student's t distribution for the intrinsic scatter, Gaussian
+measurement errors by default, and an extreme-deconvolution mixture prior for
+the latent independent variables. This package bundles
+[XDGMM](https://github.com/tholoien/XDGMM), which implements the
 [extreme deconvolution algorithm](https://arxiv.org/abs/0905.2979).
 
-More information can be found in the accompanying paper (
-[arXiv](https://arxiv.org/abs/2411.02380),
-[ADS](https://ui.adsabs.harvard.edu/abs/2024arXiv241102380M/abstract),
-[GitHub](https://github.com/wm1995/tcup-paper)). If you find the package
-useful, please consider citing the paper:
+## Installation
+
+```bash
+pip install tcup
+```
+
+The current dependency set supports Python 3.10-3.14. When working from a
+source checkout, clone with submodules so the bundled XDGMM package is present:
+
+```bash
+git clone --recurse-submodules https://github.com/wm1995/tcup.git
+```
+
+## Example
+
+```python
+import numpy as np
+import tcup
+
+rng = np.random.default_rng(1)
+x_true = np.linspace(0, 10, 30)
+y_true = 1.0 + 2.0 * x_true + rng.standard_t(df=3, size=x_true.size) * 0.4
+
+dx = np.full_like(x_true, 0.2)
+dy = np.full_like(y_true, 0.3)
+x_obs = x_true + rng.normal(0, dx)
+y_obs = y_true + rng.normal(0, dy)
+
+idata = tcup.tcup(
+    x=x_obs,
+    y=y_obs,
+    dx=dx,
+    dy=dy,
+    seed=4,
+    num_warmup=1000,
+    num_samples=1000,
+)
+
+print(idata.posterior[["alpha", "beta", "sigma_68"]])
+```
+
+Pass `cov_x` instead of `dx` for full covariance matrices with shape
+`(N, D, D)`. The number of mixture components in the latent-`x` prior can be
+fixed with `x_prior_components`; otherwise XDGMM selects it by BIC.
+
+The optional Stan backend can be installed with `pip install "tcup[stan]"`,
+but it is experimental and is not guaranteed to match the validated NumPyro
+backend.
+
+## Citation
+
+More information can be found in the accompanying paper:
+
+- [RAS Techniques and Instruments](https://doi.org/10.1093/rasti/rzaf035)
+- [arXiv](https://arxiv.org/abs/2411.02380)
+- [paper repository](https://github.com/wm1995/tcup-paper)
+
+If you find the package useful, please cite:
 
 ```bibtex
 @article{tcup,
        author = {{Martin}, William and {Mortlock}, Daniel J.},
-        title = "{Robust Bayesian regression in astronomy}",
-      journal = {arXiv e-prints},
-     keywords = {Astrophysics - Instrumentation and Methods for Astrophysics, Statistics - Methodology},
-         year = 2024,
-        month = nov,
-          eid = {arXiv:2411.02380},
-        pages = {arXiv:2411.02380},
-          doi = {10.48550/arXiv.2411.02380},
+        title = "{An approach to robust Bayesian regression in astronomy}",
+      journal = {RAS Techniques and Instruments},
+         year = 2025,
+       volume = {4},
+          eid = {rzaf035},
+          doi = {10.1093/rasti/rzaf035},
 archivePrefix = {arXiv},
        eprint = {2411.02380},
- primaryClass = {astro-ph.IM},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2024arXiv241102380M},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+ primaryClass = {astro-ph.IM}
 }
 ```

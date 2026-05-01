@@ -18,6 +18,7 @@ from numpyro.infer.reparam import TransformReparam
 from .preprocess import deconvolve
 from .scale import Scaler, StandardScaler
 from .utils import outlier_frac, sigma_68
+from .validation import prepare_input_arrays, validate_component_count
 
 
 class TanTransform(ParameterFreeTransform):
@@ -98,9 +99,11 @@ def model_builder(
         y_scaled=None,
     ):
         # Prior on heavy-tailedness
-        if fixed_nu is None:
+        if ncup:
+            nu = None
+        elif fixed_nu is None:
             nu = numpyro.sample("nu", nu_prior)
-        elif not ncup:
+        else:
             nu = fixed_nu
 
         x_true = numpyro.sample(
@@ -146,10 +149,16 @@ def model_builder(
             numpyro.deterministic("alpha", unscaled[0].reshape(alpha.shape))
             numpyro.deterministic("beta", unscaled[1].reshape(beta.shape))
             numpyro.deterministic("sigma", unscaled[2])
-            numpyro.deterministic("sigma_68", sigma_68(nu) * unscaled[2])
+            if ncup:
+                numpyro.deterministic("sigma_68", unscaled[2])
+            else:
+                numpyro.deterministic("sigma_68", sigma_68(nu) * unscaled[2])
 
         if not ncup and fixed_nu is None:
-            numpyro.deterministic("outlier_frac", outlier_frac(nu))
+            numpyro.deterministic(
+                "outlier_frac",
+                outlier_frac(jax.lax.stop_gradient(nu)),
+            )
 
         # Linear regression model
         reparam_config = {"y_true": TransformReparam()}
@@ -187,7 +196,11 @@ def model_builder(
             # Measure latent x and y values with error
             numpyro.sample(
                 "x_scaled",
-                dist.MultivariateStudentT(nu, x_true, cov_x_scaled),
+                dist.MultivariateStudentT(
+                    nu,
+                    x_true,
+                    scale_tril=jnp.linalg.cholesky(cov_x_scaled),
+                ),
                 obs=x_scaled,
             )
             numpyro.sample(
@@ -209,6 +222,7 @@ def tcup(
     prior_samples: Optional[int] = 1000,
     model_kwargs: Optional[dict] = None,
     scaler_class: type[Scaler] = StandardScaler,
+    x_prior_components: Optional[int] = None,
     **sampler_kwargs,
 ):
     if model not in ["tcup", "ncup", "fixed"]:
@@ -230,35 +244,8 @@ def tcup(
     if model_kwargs is None:
         model_kwargs = {}
 
-    if dx is not None:
-        match dx.shape:
-            case (N, D1, D2):
-                warnings.warn(
-                    "`dx` appears to be an array of covariance matrices (and"
-                    "is assumed to be such); to silence this warning, pass as"
-                    "`cov_x` instead.",
-                    UserWarning,
-                )
-                if D1 != D2:
-                    raise ValueError("Covariance matrices are not square")
-                cov_x = dx
-            case (N, D):
-                cov_x = (
-                    np.array([np.identity(D) for _ in range(N)])
-                    * dx[:, :, np.newaxis]
-                    * dx[:, np.newaxis, :]
-                )
-            case (N,):
-                cov_x = np.ones((N, 1, 1)) * dx.reshape(N, 1, 1) ** 2
-
-    if cov_x is None:
-        raise ValueError(
-            "Couldn't identify x error data; "
-            "please pass either `dx` or `cov_x`"
-        )
-
-    if x.ndim == 1:
-        x = x[:, np.newaxis]
+    x_prior_components = validate_component_count(x_prior_components)
+    x, y, dy, cov_x = prepare_input_arrays(x, y, dy, dx, cov_x)
 
     scaler = scaler_class(x, cov_x, y, dy)
 
@@ -269,17 +256,32 @@ def tcup(
         scaled_dy,
     ) = scaler.transform(x, cov_x, y, dy)
 
-    x_true_prior = xdgmm_prior(scaled_x, scaled_cov_x, seed)
+    x_true_prior = xdgmm_prior(
+        scaled_x,
+        scaled_cov_x,
+        seed,
+        K=x_prior_components,
+    )
 
     if model == "tcup":
-        numpyro_model = model_builder(x_true_prior, scaler=scaler)
+        numpyro_model = model_builder(
+            x_true_prior,
+            scaler=scaler,
+            **model_kwargs,
+        )
     elif model == "ncup":
-        numpyro_model = model_builder(x_true_prior, scaler=scaler, ncup=True)
+        numpyro_model = model_builder(
+            x_true_prior,
+            scaler=scaler,
+            ncup=True,
+            **model_kwargs,
+        )
     elif model == "fixed":
         numpyro_model = model_builder(
             x_true_prior,
             scaler=scaler,
             fixed_nu=shape_param,
+            **model_kwargs,
         )
 
     # Setup random key

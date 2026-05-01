@@ -1,3 +1,4 @@
+import jax
 import numpy as np
 import pytest
 import scipy.stats as sps
@@ -37,3 +38,8 @@ def test_normality(nu):
 def test_sigma_68(nu):
     sigma = sigma_68(nu)
     assert np.isclose(sps.t.cdf(sigma, nu), sps.norm.cdf(1))
+
+
+def test_sigma_68_has_finite_gradient():
+    grad = jax.grad(sigma_68)(3.0)
+    assert np.isfinite(grad)

@@ -131,5 +131,11 @@ def test_fixed3_intrinsic_dist(fixed3_samples):
 
 @pytest.mark.parametrize("model", ["tcup", "ncup"])
 def test_tcup(data, model):
-    mcmc = tcup(**data, model=model)
+    mcmc = tcup(
+        **data,
+        model=model,
+        num_warmup=25,
+        num_samples=25,
+        num_chains=1,
+    )
     assert isinstance(mcmc, az.InferenceData)
